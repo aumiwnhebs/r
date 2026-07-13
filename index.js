@@ -7,6 +7,15 @@
  * --------------------------------------------------
  */
 
+// Mock WebSocket globally for Node.js versions < 22 (required by Supabase)
+if (typeof globalThis.WebSocket === 'undefined') {
+    try {
+        globalThis.WebSocket = require('ws');
+    } catch (e) {
+        // Fallback if ws is not installed yet
+    }
+}
+
 const { default: TelegramBot } = require('node-telegram-bot-api');
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
