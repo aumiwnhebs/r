@@ -1,7 +1,13 @@
 {
+  "name": "sms-relay-bot",
+  "version": "1.0.0",
+  "description": "Telegram SMS Relay bot connected with Supabase Cloud DB",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.3",
     "node-telegram-bot-api": "^1.1.2",
-    "sqlite3": "^6.0.1"
+    "@supabase/supabase-js": "^2.40.0"
   }
 }
