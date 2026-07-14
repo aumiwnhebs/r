@@ -167,13 +167,25 @@ async function deleteUser(userId) {
 async function testFirebase(url, secret = null) {
     const cleanUrl = url.replace(/\/$/, "");
     let fullUrl = secret ? `${cleanUrl}/clients.json?auth=${secret}` : `${cleanUrl}/clients.json`;
+    
+    const controller = new AbortController();
+    const fetchPromise = fetch(fullUrl, { signal: controller.signal })
+        .then((response) => {
+            if (response.ok) return { success: true };
+            return { success: false, status: response.status };
+        });
+        
+    const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => {
+            try {
+                controller.abort();
+            } catch (e) {}
+            resolve({ success: false, error: 'Timeout' });
+        }, 5000); // 5 seconds timeout
+    });
+
     try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-        const response = await fetch(fullUrl, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (response.ok) return { success: true };
-        return { success: false, status: response.status };
+        return await Promise.race([fetchPromise, timeoutPromise]);
     } catch (err) {
         return { success: false, error: err.message };
     }
